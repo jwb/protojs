@@ -116,7 +116,7 @@ PROTO.required = 'required';
  * @param {string} s
  */
 PROTO.warn = function (s) {
-    if (typeof(self.console)!="undefined" && self.console.log) {
+    if (self && typeof(self.console)!="undefined" && self.console.log) {
         self.console.log(s);            
     }
 };
@@ -360,6 +360,9 @@ PROTO.I64.parseLEVar128 = function (stream, float64toassignto) {
     var offset=1;
     for (var i = 0; !endloop && i < 5; i++) {
         var byt = stream.readByte();
+        if (null == byt) {
+        	return null; // end of file
+        }
         if (byt >= 128) {
             byt -= 128;
         } else {
@@ -462,6 +465,8 @@ PROTO.BinaryParser = function(bigEndian, allowExceptions){
         for(bits = -(-bits >> 3) - r.length; bits--;){}
         return (this.bigEndian ? r.reverse() : r);
     };
+if (typeof(ArrayBuffer) !== "undefined" && typeof(Uint8Array) !== "undefined") {
+
 (function () {
     var buffer8byte = new ArrayBuffer(8);
     var buffer4byte = new ArrayBuffer(4);
@@ -494,6 +499,7 @@ PROTO.BinaryParser = function(bigEndian, allowExceptions){
         return f64buffer.getFloat64(0,true);
     }
 })();
+}
     PROTO.BinaryParser.prototype.decodeFloat = function(data, precisionBits, exponentBits){
         var b = new this.Buffer(this.bigEndian, data);
         PROTO.BinaryParser.prototype.checkBuffer.call(b, precisionBits + exponentBits + 1);
@@ -815,7 +821,7 @@ PROTO.Uint8ArrayStream.prototype.getArray = function() {
 };
 
 PROTO.CreateArrayStream = function(arr) {
-  if (arr instanceof Array) {
+  if (arr['slice']) {
     return new PROTO.ByteArrayStream(arr);
   } else {
     return new PROTO.Uint8ArrayStream(arr);
@@ -1019,6 +1025,9 @@ if (typeof(ArrayBuffer) !== "undefined" && typeof(Uint8Array) !== "undefined") {
 	var BlobBuilder = null;
 	var slice = "slice";
 	var testBlob;
+	if (!self) {
+		var self = {};
+	}
 	try {
 	    testBlob = new self.Blob([new ArrayBuffer(1)]);
 	    useBlobCons = true;
@@ -1026,7 +1035,7 @@ if (typeof(ArrayBuffer) !== "undefined" && typeof(Uint8Array) !== "undefined") {
         /**
          * @suppress {missingProperties} self
          */
-	    BlobBuilder = self.BlobBuilder || 
+	    BlobBuilder = self && self.BlobBuilder || 
             self["WebKitBlobBuilder"] || self["MozBlobBuilder"] || self["MSBlobBuilder"];
         try {
 	        testBlob = new BlobBuilder().getBlob();
@@ -1126,7 +1135,11 @@ PROTO.string = {
     },
     ParseFromStream: function(stream) {
         var arr = PROTO.bytes.ParseFromStream(stream);
-        return PROTO.decodeUTF8(arr);
+        var result = null;
+        if (arr) {
+        	result = PROTO.decodeUTF8(arr);
+        }
+        return result;
     },
     toString: function(str) {return str;}
 };
@@ -1264,11 +1277,14 @@ PROTO.bytes = {
     var temp64num = new PROTO.I64(0,0,1);
     function parseInt32(stream) {
         var n = PROTO.I64.parseLEVar128(stream,temp64num);
-        var lsw=n.lsw;
-        if (lsw > 2147483647) {
-            lsw -= 2147483647;
-            lsw -= 2147483647;
-            lsw -= 2;
+        var lsw = null;
+        if (null !== n) {
+        	lsw = n.lsw;
+	        if (lsw > 2147483647) {
+	            lsw -= 2147483647;
+	            lsw -= 2147483647;
+	            lsw -= 2;
+	        }
         }
         return lsw;
     };
@@ -1373,6 +1389,9 @@ PROTO.mergeProperties = function(properties, stream, values) {
     while (stream.valid()) {
         nextfid = PROTO.int32.ParseFromStream(stream);
 //        PROTO.warn(""+stream.read_pos_+" ; "+stream.array_.length);
+		if (null === nextfid) {
+			break;
+		}
         nexttype = nextfid % 8;
         nextfid >>>= 3;
         nextpropname = fidToProp[nextfid];
@@ -1894,8 +1913,10 @@ PROTO.Extend = function(parent, newproperties) {
 };
 
 //////// DEBUG
-if (typeof(self.console)=="undefined") self.console = {};
-if (typeof(self.console.log)=="undefined") self.console.log = function(message){
-    if (document && document.body)
-        document.body.appendChild(document.createTextNode(message+"..."));
+if (typeof(self)!="undefined") {
+	if (typeof(self.console)=="undefined") self.console = {};
+	if (typeof(self.console.log)=="undefined") self.console.log = function(message){
+	    if (document && document.body)
+	        document.body.appendChild(document.createTextNode(message+"..."));
+	}
 };
